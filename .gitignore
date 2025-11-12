@@ -1,3 +1,4 @@
-/dist/
+# Uncomment to ignore dist/ folder, but GitHub Pages deployment needs dist/
+# /dist/
 /target/
 /Cargo.lock

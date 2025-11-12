@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <base href="/" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OHH to PokerStars Converter | Poker at Berkeley</title>
+    <meta
+      name="description"
+      content="Convert .ohh poker hand history files to PokerStars format for GTO Wizard analysis"
+    />
+
+    <!-- Ubuntu Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap"
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
+
+    <link rel="stylesheet" href="/styles-70c591eb520b1c1a.css" integrity="sha384-RACqz7IlFSSJLU95XJN8hTJunNGQ9M0FAHcYbcDZ+6OHjuHP5JfFG0BYz5EHO23x"/>
+    
+    
+<script type="module">
+import init, * as bindings from '/pab-converter-ui-df253f3d53b023ce.js';
+const wasm = await init({ module_or_path: '/pab-converter-ui-df253f3d53b023ce_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: [
+                "Ubuntu",
+                "ui-sans-serif",
+                "system-ui",
+                "-apple-system",
+                "BlinkMacSystemFont",
+                "Segoe UI",
+                "Roboto",
+                "Helvetica Neue",
+                "Arial",
+                "Noto Sans",
+                "sans-serif",
+              ],
+            },
+          },
+        },
+      };
+    </script>
+  <link rel="modulepreload" href="/pab-converter-ui-df253f3d53b023ce.js" crossorigin="anonymous" integrity="sha384-BRTXpwD5xmFdKtM58fciMwLU2KGa0x5e68anlwYIPBqSZMdIfVY3cGBXf1J5WRux"><link rel="preload" href="/pab-converter-ui-df253f3d53b023ce_bg.wasm" crossorigin="anonymous" integrity="sha384-y6fDH4DotBjbcwiJEoNx43G0O5DhC3slndDGqJalvoFCx8tT3r8tcpLLqwkDom+J" as="fetch" type="application/wasm"></head>
+  <body class="bg-gray-900">
+    <!-- Loading skeleton -->
+    <div
+      id="loading-skeleton"
+      style="
+        position: fixed;
+        inset: 0;
+        background: rgb(17 24 39);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      "
+    >
+      <div style="text-align: center">
+        <div
+          style="
+            width: 64px;
+            height: 64px;
+            border: 4px solid rgba(59, 130, 246, 0.3);
+            border-top-color: rgb(59, 130, 246);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+          "
+        ></div>
+        <p style="color: white; font-size: 18px; font-weight: 500">
+          Loading Converter...
+        </p>
+      </div>
+    </div>
+    <style>
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+    <script>
+      (function () {
+        var checkCount = 0;
+        var maxChecks = 50;
+
+        var checkInterval = setInterval(function () {
+          checkCount++;
+          var body = document.body;
+          var skeleton = document.getElementById("loading-skeleton");
+
+          var hasContent =
+            body.querySelector("main") ||
+            body.querySelector("section") ||
+            body.querySelector("div:not(#loading-skeleton)");
+
+          if (hasContent) {
+            if (skeleton) {
+              skeleton.style.display = "none";
+            }
+            clearInterval(checkInterval);
+          } else if (checkCount >= maxChecks) {
+            console.warn(
+              "Loading skeleton timeout - hiding anyway",
+            );
+            if (skeleton) {
+              skeleton.style.display = "none";
+            }
+            clearInterval(checkInterval);
+          }
+        }, 100);
+      })();
+    </script>
+  </body>
+</html>
