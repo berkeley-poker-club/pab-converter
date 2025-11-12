@@ -1,5 +1,6 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use log::{debug, info, warn, error};
 
 fn default_game_number() -> String {
     "unknown".to_string()
@@ -191,11 +192,16 @@ pub struct PlayerWin {
 }
 
 pub fn parse_ohh_chunks(text: &str) -> Result<Vec<OhhHand>, String> {
+    debug!("parse_ohh_chunks called with {} bytes", text.len());
+
     let re_blank = Regex::new(r"\n\s*\n").map_err(|e| e.to_string())?;
     let mut chunks: Vec<&str> = re_blank.split(text).collect();
 
+    debug!("Split into {} chunks by blank lines", chunks.len());
+
     if chunks.len() == 1 {
         chunks = text.lines().collect();
+        debug!("Only 1 chunk, splitting by lines: {} chunks", chunks.len());
     }
 
     let mut hands = Vec::new();
@@ -213,12 +219,16 @@ pub fn parse_ohh_chunks(text: &str) -> Result<Vec<OhhHand>, String> {
             continue;
         }
 
+        debug!("Processing chunk {} (size: {} bytes)", idx, chunk.len());
+
         match serde_json::from_str::<OhhFile>(chunk) {
             Ok(data) => {
+                debug!("Successfully parsed chunk {} as OhhFile (game #{})", idx, data.ohh.game_number);
                 hands.push(data.ohh);
             }
             Err(e1) => match serde_json::from_str::<OhhHand>(chunk) {
                 Ok(hand) => {
+                    debug!("Successfully parsed chunk {} as OhhHand (game #{})", idx, hand.game_number);
                     hands.push(hand);
                 }
                 Err(e2) => {
@@ -227,28 +237,33 @@ pub fn parse_ohh_chunks(text: &str) -> Result<Vec<OhhHand>, String> {
                     } else {
                         chunk.to_string()
                     };
-                    errors.push(format!(
+                    let err_msg = format!(
                         "Chunk {}: Failed to parse (OhhFile: {}, OhhHand: {}). Preview: {}",
                         idx, e1, e2, preview
-                    ));
+                    );
+                    warn!("{}", err_msg);
+                    errors.push(err_msg);
                     continue;
                 }
             },
         }
     }
 
+    info!("Parsing complete: {} hands parsed, {} skipped, {} errors",
+          hands.len(), skipped_count, errors.len());
+
     if skipped_count > 0 || !errors.is_empty() {
-        eprintln!("WARNING: Parsing issues detected:");
+        warn!("Parsing issues detected:");
         if skipped_count > 0 {
-            eprintln!("  - Skipped {} short chunks (< 50 chars)", skipped_count);
+            warn!("  - Skipped {} short chunks (< 50 chars)", skipped_count);
         }
         if !errors.is_empty() {
-            eprintln!("  - Failed to parse {} chunks:", errors.len());
+            warn!("  - Failed to parse {} chunks:", errors.len());
             for (i, err) in errors.iter().take(5).enumerate() {
-                eprintln!("    {}. {}", i + 1, err);
+                warn!("    {}. {}", i + 1, err);
             }
             if errors.len() > 5 {
-                eprintln!("    ... and {} more errors", errors.len() - 5);
+                warn!("    ... and {} more errors", errors.len() - 5);
             }
         }
     }
@@ -606,15 +621,23 @@ pub fn ohh_to_pokerstars_text(h: &OhhHand) -> String {
 }
 
 pub fn convert_ohh_file(content: &str) -> Result<String, String> {
+    debug!("convert_ohh_file called with {} bytes", content.len());
+
     let hands = parse_ohh_chunks(content)?;
 
     if hands.is_empty() {
-        return Err("No valid hands found in file".to_string());
+        let err = "No valid hands found in file";
+        error!("{}", err);
+        return Err(err.to_string());
     }
 
+    debug!("Converting {} hands to PokerStars format", hands.len());
     let converted_hands: Vec<String> = hands.iter().map(ohh_to_pokerstars_text).collect();
 
-    Ok(converted_hands.join("\n\n\n\n"))
+    let result = converted_hands.join("\n\n\n\n");
+    info!("Conversion complete: {} hands converted, output size: {} bytes", hands.len(), result.len());
+
+    Ok(result)
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ use leptos::task::spawn_local;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{Event, FileReader, HtmlInputElement};
+use web_sys::{Event, FileReader, HtmlInputElement, DragEvent};
 
 #[wasm_bindgen]
 extern "C" {
@@ -56,21 +56,29 @@ pub fn App() -> impl IntoView {
                 set_upload_status.set(Some(format!("Selected: {}", file_name)));
 
                 // Start reading the file
-                let file_reader = FileReader::new().unwrap();
-                let fr = file_reader.clone();
+                match FileReader::new() {
+                    Ok(file_reader) => {
+                        let fr = file_reader.clone();
 
-                let onload = Closure::wrap(Box::new(move |_: Event| {
-                    if let Ok(result) = fr.result() {
-                        if let Some(text) = result.as_string() {
-                            set_upload_status.set(Some("File ready to convert".to_string()));
-                        }
+                        let onload = Closure::wrap(Box::new(move |_: Event| {
+                            if let Ok(result) = fr.result() {
+                                if let Some(text) = result.as_string() {
+                                    set_upload_status.set(Some("File ready to convert".to_string()));
+                                }
+                            }
+                        }) as Box<dyn FnMut(_)>);
+
+                        file_reader.set_onload(Some(onload.as_ref().unchecked_ref()));
+                        onload.forget();
+
+                        let _ = file_reader.read_as_text(&file);
                     }
-                }) as Box<dyn FnMut(_)>);
-
-                file_reader.set_onload(Some(onload.as_ref().unchecked_ref()));
-                onload.forget();
-
-                let _ = file_reader.read_as_text(&file);
+                    Err(_) => {
+                        set_upload_status.set(Some(
+                            "Error: Failed to initialize file reader".to_string(),
+                        ));
+                    }
+                }
             }
         }
     };
@@ -85,6 +93,27 @@ pub fn App() -> impl IntoView {
         }
     };
 
+    // Drag & drop handlers (defined after handle_files so they can capture it)
+    let on_drag_over = move |ev: DragEvent| {
+        ev.prevent_default();
+        set_is_dragging.set(true);
+    };
+
+    let on_drag_leave = move |ev: DragEvent| {
+        ev.prevent_default();
+        set_is_dragging.set(false);
+    };
+
+    let on_drop = move |ev: DragEvent| {
+        ev.prevent_default();
+        if let Some(dt) = ev.data_transfer() {
+            if let Some(files) = dt.files() {
+                handle_files(files);
+            }
+        }
+        set_is_dragging.set(false);
+    };
+
     let convert_file = move |_| {
         if let Some(input_element) = file_input_ref.get() {
             let input_el: &HtmlInputElement = input_element.as_ref();
@@ -94,53 +123,70 @@ pub fn App() -> impl IntoView {
                     set_is_converting.set(true);
                     set_upload_status.set(Some("Converting...".to_string()));
 
-                    let file_reader = FileReader::new().unwrap();
-                    let fr = file_reader.clone();
-
-                    // Clone signals for use in the closure
+                    // Clone signals for use in the async block
                     let set_is_converting_clone = set_is_converting;
                     let set_upload_status_clone = set_upload_status;
                     let set_converted_content_clone = set_converted_content;
                     let set_selected_file_info_clone = set_selected_file_info;
 
-                    let onload = Closure::wrap(Box::new(move |_: Event| {
-                        if let Ok(result) = fr.result() {
-                            if let Some(content) = result.as_string() {
-                                // Now we have the file content, invoke the backend
-                                let file_name_copy = file_name.clone();
-                                spawn_local(async move {
-                                    let args =
-                                        serde_wasm_bindgen::to_value(&ConvertArgs { content })
-                                            .unwrap();
-                                    let result = invoke("convert_ohh_content", args).await;
+                    spawn_local(async move {
+                        // Use web_sys Blob reader to read the file
+                        match wasm_bindgen_futures::JsFuture::from(file.slice().unwrap().text()).await
+                        {
+                            Ok(text_promise) => {
+                                if let Some(content) = text_promise.as_string() {
+                                    match serde_wasm_bindgen::to_value(&ConvertArgs { content }) {
+                                        Ok(args) => {
+                                            let result =
+                                                invoke("convert_ohh_content", args).await;
+                                            set_is_converting_clone.set(false);
 
-                                    set_is_converting_clone.set(false);
-
-                                    if let Some(response) = result.as_string() {
-                                        if response.starts_with("Error")
-                                            || response.starts_with("Failed")
-                                        {
-                                            set_upload_status_clone
-                                                .set(Some(format!("[ERR] {}", response)));
-                                            set_converted_content_clone.set(String::new());
-                                        } else {
-                                            set_converted_content_clone.set(response);
+                                            if let Some(response) = result.as_string() {
+                                                if response.starts_with("Error")
+                                                    || response.starts_with("Failed")
+                                                {
+                                                    set_upload_status_clone.set(Some(format!(
+                                                        "[ERR] {}",
+                                                        response
+                                                    )));
+                                                    set_converted_content_clone.set(String::new());
+                                                } else {
+                                                    set_converted_content_clone.set(response);
+                                                    set_upload_status_clone.set(Some(format!(
+                                                        "[OK] Successfully converted: {}",
+                                                        file_name
+                                                    )));
+                                                    set_selected_file_info_clone.set(None);
+                                                }
+                                            } else {
+                                                set_upload_status_clone.set(Some(
+                                                    "[ERR] Invalid response from backend".to_string(),
+                                                ));
+                                            }
+                                        }
+                                        Err(e) => {
+                                            set_is_converting_clone.set(false);
                                             set_upload_status_clone.set(Some(format!(
-                                                "[OK] Successfully converted: {}",
-                                                file_name_copy
+                                                "[ERR] Failed to prepare request: {}",
+                                                e
                                             )));
-                                            set_selected_file_info_clone.set(None);
                                         }
                                     }
-                                });
+                                } else {
+                                    set_is_converting_clone.set(false);
+                                    set_upload_status_clone.set(Some(
+                                        "[ERR] Could not read file content".to_string(),
+                                    ));
+                                }
+                            }
+                            Err(_) => {
+                                set_is_converting_clone.set(false);
+                                set_upload_status_clone.set(Some(
+                                    "[ERR] Failed to read file".to_string(),
+                                ));
                             }
                         }
-                    }) as Box<dyn FnMut(_)>);
-
-                    file_reader.set_onload(Some(onload.as_ref().unchecked_ref()));
-                    onload.forget();
-
-                    let _ = file_reader.read_as_text(&file);
+                    });
                 }
             }
         }
@@ -154,22 +200,44 @@ pub fn App() -> impl IntoView {
 
         // Create a blob and download link
         spawn_local(async move {
-            let window = web_sys::window().unwrap();
-            let document = window.document().unwrap();
+            let result: Result<(), String> = (|| {
+                let window = web_sys::window().ok_or("No window object available")?;
+                let document = window
+                    .document()
+                    .ok_or("No document available")?;
 
-            let array = js_sys::Array::new();
-            array.push(&JsValue::from_str(&content));
-            let blob = web_sys::Blob::new_with_str_sequence(&array).unwrap();
+                let array = js_sys::Array::new();
+                array.push(&JsValue::from_str(&content));
+                let blob = web_sys::Blob::new_with_str_sequence(&array)
+                    .map_err(|_| "Failed to create blob".to_string())?;
 
-            let url = web_sys::Url::create_object_url_with_blob(&blob).unwrap();
-            let a = document.create_element("a").unwrap();
-            a.set_attribute("href", &url).unwrap();
-            a.set_attribute("download", "converted_hands.txt").unwrap();
+                let url = web_sys::Url::create_object_url_with_blob(&blob)
+                    .map_err(|_| "Failed to create download URL".to_string())?;
 
-            let html_element = a.dyn_into::<web_sys::HtmlElement>().unwrap();
-            html_element.click();
+                let a = document
+                    .create_element("a")
+                    .map_err(|_| "Failed to create link element".to_string())?;
 
-            web_sys::Url::revoke_object_url(&url).unwrap();
+                a.set_attribute("href", &url)
+                    .map_err(|_| "Failed to set href".to_string())?;
+                a.set_attribute("download", "converted_hands.txt")
+                    .map_err(|_| "Failed to set download attribute".to_string())?;
+
+                let html_element = a
+                    .dyn_into::<web_sys::HtmlElement>()
+                    .map_err(|_| "Failed to convert to HtmlElement".to_string())?;
+
+                html_element.click();
+
+                web_sys::Url::revoke_object_url(&url)
+                    .map_err(|_| "Failed to revoke URL".to_string())?;
+
+                Ok(())
+            })();
+
+            if let Err(e) = result {
+                set_upload_status.set(Some(format!("[ERR] Download failed: {}", e)));
+            }
         });
     };
 
@@ -180,12 +248,25 @@ pub fn App() -> impl IntoView {
         }
 
         spawn_local(async move {
-            let window = web_sys::window().unwrap();
-            let navigator = window.navigator();
-            let clipboard = navigator.clipboard();
-            let promise = clipboard.write_text(&content);
-            let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
-            set_upload_status.set(Some("Copied to clipboard".to_string()));
+            match web_sys::window() {
+                Some(window) => {
+                    let clipboard = window.navigator().clipboard();
+                    let promise = clipboard.write_text(&content);
+                    match wasm_bindgen_futures::JsFuture::from(promise).await {
+                        Ok(_) => {
+                            set_upload_status.set(Some("Copied to clipboard".to_string()));
+                        }
+                        Err(_) => {
+                            set_upload_status
+                                .set(Some("[ERR] Failed to write to clipboard".to_string()));
+                        }
+                    }
+                }
+                None => {
+                    set_upload_status
+                        .set(Some("[ERR] Window object not available".to_string()));
+                }
+            }
         });
     };
 
@@ -208,6 +289,9 @@ pub fn App() -> impl IntoView {
 
                     <div
                         class="border-2 border-dashed rounded-lg p-12 text-center transition-all duration-200 cursor-pointer border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500"
+                        on:dragover=on_drag_over
+                        on:dragleave=on_drag_leave
+                        on:drop=on_drop
                     >
                         <div class="space-y-4">
                             <div class="flex justify-center">
@@ -222,24 +306,16 @@ pub fn App() -> impl IntoView {
                                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
                                     "or"
                                 </p>
-                                <button
-                                    class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg cursor-pointer transition-colors"
-                                    on:click=move |_| {
-                                        if let Some(input_element) = file_input_ref.get() {
-                                            let input_el: &HtmlInputElement = input_element.as_ref();
-                                            let _ = input_el.click();
-                                        }
-                                    }
-                                >
+                                <label class="inline-block bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg cursor-pointer transition-colors">
                                     "Browse Files"
-                                </button>
-                                <input
-                                    node_ref=file_input_ref
-                                    type="file"
-                                    accept=".ohh,.txt,.json"
-                                    class="hidden"
-                                    on:change=on_file_input
-                                />
+                                    <input
+                                        node_ref=file_input_ref
+                                        type="file"
+                                        accept=".ohh,.txt,.json"
+                                        class="sr-only"
+                                        on:change=on_file_input
+                                    />
+                                </label>
                             </div>
                             <p class="text-xs text-gray-500 dark:text-gray-400">
                                 "Only .ohh, .txt, or .json files are accepted"

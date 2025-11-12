@@ -13,6 +13,8 @@ web-sys = { version = "0.3", features = [
     "File",
     "FileReader",
     "FileList",
+    "DragEvent",
+    "DataTransfer",
     "Blob",
     "BlobPropertyBag",
     "Url",
@@ -23,7 +25,8 @@ web-sys = { version = "0.3", features = [
     "Window",
     "Document",
     "Element",
-    "console"
+    "console",
+    "ReadableStream"
 ] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
