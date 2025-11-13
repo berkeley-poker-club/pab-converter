@@ -12,27 +12,11 @@ fn greet(name: &str) -> String {
 fn convert_ohh_content(content: String) -> Result<String, String> {
     debug!("convert_ohh_content called with {} bytes", content.len());
 
-    // Enforce maximum content size
-    const MAX_CONTENT_SIZE: usize = 100 * 1024 * 1024; // 100MB
-
-    if content.len() > MAX_CONTENT_SIZE {
-        let err_msg = format!(
-            "Input too large: {} MB (maximum 100 MB)",
-            content.len() / 1024 / 1024
-        );
-        warn!("{}", err_msg);
-        return Err(err_msg);
-    }
-
-    debug!("Content size is valid, starting conversion");
     match converter::convert_ohh_file(&content) {
-        Ok(result) => {
-            info!("Conversion successful, output size: {} bytes", result.len());
-            Ok(result)
-        }
+        Ok(result) => Ok(result),
         Err(e) => {
-            error!("Conversion failed: {}", e);
-            Err(e)
+            error!("conversion failed: {}", e);
+            Err(format!("conversion failed: {}", e))
         }
     }
 }
