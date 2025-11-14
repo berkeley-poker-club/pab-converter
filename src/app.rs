@@ -137,9 +137,17 @@ pub fn App() -> impl IntoView {
                                 if let Some(content) = text_promise.as_string() {
                                     match serde_wasm_bindgen::to_value(&ConvertArgs { content }) {
                                         Ok(args) => {
-                                            let result =
-                                                invoke("convert_ohh_content", args).await;
-                                            set_is_converting_clone.set(false);
+                                            match invoke::<_, String>("convert_ohh_content", args).await {
+                                                Ok(_) => {
+                                                    set_upload_status_clone.set(Some("conversion completed successfully.".to_string()));
+                                                    set_is_converting_clone.set(false);
+                                                }
+                                                Err(e) => {
+                                                    set_upload_status_clone.set(Some(format!("error: {}", e)));
+                                                    set_is_converting_clone.set(false);
+                                                }
+                                            }
+
 
                                             if let Some(response) = result.as_string() {
                                                 if response.starts_with("Error")
